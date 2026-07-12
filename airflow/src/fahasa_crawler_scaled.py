@@ -4,9 +4,16 @@ import os
 import time
 from datetime import datetime
 from typing import Any,Dict,List,Optional,Tuple
-
-from audit_utils import insert_task_audit,upsert_pipeline_run,finish_pipeline_run,update_task_audit
+try:
+    from nhap.audit_utils import insert_task_audit,upsert_pipeline_run,finish_pipeline_run,update_task_audit
+except:
+    def insert_task_audit(*args, **kwargs): pass
+    def upsert_pipeline_run(*args, **kwargs): pass
+    def finish_pipeline_run(*args, **kwargs): pass
+    def update_task_audit(*args, **kwargs): pass
+    
 from minio import Minio
+from src.utils.minio_config import upload_to_lake
 from playwright.sync_api import(
     Browser,
     BrowserContext,
@@ -15,28 +22,173 @@ from playwright.sync_api import(
     TimeoutError as PlaywrightTimeoutError,
     sync_playwright,
 )
+def insert_task_audit(*args, **kwargs):
+    pass
+
+def upsert_pipeline_run(*args, **kwargs):
+    pass
+
+def finish_pipeline_run(*args, **kwargs):
+    pass
+
+def update_task_audit(*args, **kwargs):
+    pass
 
 #CONFIG
 
 SOURCE_NAME = "fahasa"
 
-# trang và link text cần để thu response (9 response tra ve)
+# thể loại lớn, và thể loại con có thể click
 CATEGORY_CONFIG = {
     "VĂN HỌC": {
         "url": "https://www.fahasa.com/sach-trong-nuoc/van-hoc-trong-nuoc.html",
-        "targets": ["Tiểu Thuyết", "Truyện Ngắn - Tản Văn", "Ngôn Tình"],
+        "targets": [
+            "Tiểu Thuyết",
+            "Truyện Ngắn - Tản Văn",
+            "Light Novel",
+            "Ngôn Tình",
+            "Truyện Trinh Thám - Kiếm Hiệp",
+            "Huyền Bí - Giả Tưởng - Kinh Dị",
+            "Tác Phẩm Kinh Điển",
+            "Thơ Ca, Tục Ngữ, Ca Dao, Thành Ngữ",
+            "Phóng Sự - Ký Sự - Phê Bình Văn Học",
+        ],
     },
+
     "KINH TẾ": {
         "url": "https://www.fahasa.com/sach-trong-nuoc/kinh-te-chinh-tri-phap-ly.html",
-        "targets": ["Quản Trị - Lãnh Đạo", "Marketing - Bán Hàng", "Phân Tích Kinh Tế"],
+        "targets": [
+            "Nhân Vật - Bài Học Kinh Doanh",
+            "Quản Trị - Lãnh Đạo",
+            "Marketing - Bán Hàng",
+            "Phân Tích Kinh Tế",
+            "Khởi Nghiệp - Làm Giàu",
+            "Tài Chính - Ngân Hàng",
+            "Kế Toán - Kiểm Toán - Thuế",
+            "Chứng Khoán - Bất Động Sản - Đầu Tư",
+        ],
     },
+
     "TÂM LÝ - KỸ NĂNG SỐNG": {
         "url": "https://www.fahasa.com/sach-trong-nuoc/tam-ly-ky-nang-song.html",
-        "targets": ["Kỹ Năng Sống", "Tâm Lý", "Rèn Luyện Nhân Cách"],
+        "targets": [
+            "Kỹ Năng Sống",
+            "Tâm Lý",
+            "Rèn Luyện Nhân Cách",
+            "Sách Cho Tuổi Mới Lớn",
+            "Chicken Soup - Hạt Giống Tâm Hồn",
+        ],
     },
-}
 
-#dịch vụ được thiết lập sẵn tk,mk và vị trí của nó(lưu data thô)
+    "NUÔI DẠY CON": {
+        "url": "https://www.fahasa.com/sach-trong-nuoc/nuoi-day-con.html",
+        "targets": [
+            "Cẩm Nang Làm Cha Mẹ",
+            "Phương Pháp Giáo Dục Trẻ Các Nước",
+            "Phát Triển Kỹ Năng - Trí Tuệ Cho Trẻ",
+            "Dinh Dưỡng - Sức Khỏe Cho Trẻ",
+            "Dành Cho Mẹ Bầu",
+            "Giáo Dục Trẻ Tuổi Teen",
+        ],
+    },
+
+    "THIẾU NHI": {
+        "url": "https://www.fahasa.com/sach-trong-nuoc/thieu-nhi.html",
+        "targets": [
+            "Truyện Thiếu Nhi",
+            "Kiến Thức Bách Khoa",
+            "Tô Màu, Luyện Chữ",
+            "Kiến Thức - Kỹ Năng Sống Cho Trẻ",
+            "Từ Điển Thiếu Nhi",
+            "Sách Nói",
+            "Tạp Chí Thiếu Nhi",
+            "Manga - Comic",
+        ],
+    },
+
+    "GIÁO KHOA - THAM KHẢO": {
+        "url": "https://www.fahasa.com/sach-trong-nuoc/giao-khoa-tham-khao.html",
+        "targets": [
+            "Sách Giáo Khoa",
+            "Sách Tham Khảo",
+            "Mẫu Giáo",
+            "Sách Giáo Viên",
+            "Đại Học",
+            "Luyện Thi THPT Quốc Gia",
+        ],
+    },
+
+    "SÁCH HỌC NGOẠI NGỮ": {
+        "url": "https://www.fahasa.com/sach-trong-nuoc/sach-hoc-ngoai-ngu.html",
+        "targets": [
+            "Tiếng Anh",
+            "Tiếng Nhật",
+            "Tiếng Hoa",
+            "Tiếng Hàn",
+            "Tiếng Pháp",
+            "Tiếng Đức",
+            "Tiếng Việt Cho Người Nước Ngoài",
+            "Ngoại Ngữ Khác",
+            "Flashcard",
+        ],
+    },
+
+    "TIỂU SỬ HỒI KÝ": {
+        "url": "https://www.fahasa.com/sach-trong-nuoc/tieu-su-hoi-ky.html",
+        "targets": [
+            "Câu Chuyện Cuộc Đời",
+            "Chính Trị",
+            "Kinh Tế",
+            "Nghệ Thuật - Giải Trí",
+            "Thể Thao",
+            "Lịch Sử",
+        ],
+    },
+
+    "CHÍNH TRỊ - PHÁP LÝ - TRIẾT HỌC": {
+        "url": "https://www.fahasa.com/sach-trong-nuoc/chinh-tri-phap-ly-triet-hoc.html",
+        "targets": [
+            "Văn Kiện",
+            "Nhân Vật Và Sự Kiện",
+            "Triết Học- Lý Luận Chính Trị",
+            "Luật - Văn Bản Dưới Luật",
+            "Đội - Đoàn - Đảng",
+        ],
+    },
+
+    "KHOA HỌC KỸ THUẬT": {
+        "url": "https://www.fahasa.com/sach-trong-nuoc/khoa-hoc-ky-thuat.html",
+        "targets": [
+            "Y Học",
+            "Tin Học",
+            "Khoa Học Vũ Trụ",
+            "Cơ Khí",
+            "Giáo Dục",
+            "Toán Học",
+        ],
+    },
+
+    "LỊCH SỬ - ĐỊA LÝ - TÔN GIÁO": {
+        "url": "https://www.fahasa.com/sach-trong-nuoc/lich-su-dia-ly-ton-giao.html",
+        "targets": [
+            "Lịch Sử",
+            "Tôn Giáo",
+            "Địa Lý",
+        ],
+    },
+
+   "Nữ Công Gia Chánh": {
+        "url": "https://www.fahasa.com/sach-trong-nuoc/nu-cong-gia-chanh.html",
+        "targets": [
+            "Nấu Ăn",
+            "Khéo Tay",
+            "Làm Đẹp",
+            "Món Ăn Bài Thuốc",
+            "Mẹo Vặt - Cẩm Nang",
+    ],
+}
+}
+# lấy thông số để kết nối với minio đẩy data lên
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT","localhost:9000")
 MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY","minioadmin")
 MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY","minioadmin")
@@ -44,13 +196,15 @@ MINIO_BUCKET = os.getenv("MINIO_BUCKET","data-lake")
 
 #cấu hình cho trang web(trình duyệt nào, và có xem ko khi khởi tạo)
 HEADLESS = os.getenv("HEADLESS","false").lower()=="true"
-BROWSER_CHANNEL = os.getenv("BROWSER_CHANNEL","chrome")
+BROWSER_CHANNEL = os.getenv("BROWSER_CHANNEL")
 
-#thời gian chờ tạm thời ở trang(giúp ko mất response khi trang mới load, hoặc là đỡ bị mất thứ tự response)
+#chia thời gian wait như thời gian load trang, thời gian click, thời gian croll, thời gian chờ reponse,...
 PAGE_TIMEOUT_MS = int(os.getenv("PAGE_TIMEOUT_MS", "30000"))
 SHORT_WAIT_MS = int(os.getenv("SHORT_WAIT_MS", "1000"))
 MEDIUM_WAIT_MS = int(os.getenv("MEDIUM_WAIT_MS", "3000"))
 LONG_WAIT_MS = int(os.getenv("LONG_WAIT_MS", "5000"))
+# Số lần scroll/click thêm trang sau khi vào mỗi subcategory. Tăng để lấy nhiều page hơn.
+MAX_SCROLL_PAGES = int(os.getenv("MAX_SCROLL_PAGES", "150"))
 
 #số lần thử lại khi mà không bắt được response hoặc lỗi gì đó
 MAX_RETRY = int(os.getenv("MAX_RETRY","3"))
@@ -59,7 +213,7 @@ MAX_RETRY = int(os.getenv("MAX_RETRY","3"))
 DATA_DIR = os.getenv("DATA_DIR","data/raw")
 
 #từ khóa là bắt response chứa nó (1 là của các sản phẩm theo category, 2 là chi tiết từng sản phẩm )
-CATALOG_API_KEYWORD = "loadCatalog"
+CATALOG_API_KEYWORDS = ["loadCatalog", "loadproducts"]
 FLASHSALE_API_PREFIX = "https://www.fahasa.com/node_api/flashsale/product"
 
 #LOGGING về mặt thông báo để dễ kiểm soát debug
@@ -75,7 +229,7 @@ def now_iso() -> str:
     return datetime.now().isoformat()
 def now_str()->str:
     return datetime.now().strftime("%Y%m%d_%H%M%S")
-#kiểm tra response có ổn để lấy không
+#kiểm tra response có phải dạng json ko 
 def safe_json_response(response) ->Optional[Dict[str,Any]]:
     try:
         return response.json()
@@ -118,24 +272,29 @@ def ensure_bucket(client:Minio,bucket_name:str) -> None:
         logger.info(f"Bucket '{bucket_name}' đã tồn tại.")
         
 #PLAYWRIGHT 
-#tạo giả lập một trình duyệt sau tab để sử dụng 
+#tạo giả lập một trình duyệt 
+# trinhd duyệt
 def create_browser(p:Playwright)->Browser:
-    browser =p.chromium.launch(
-        channel = BROWSER_CHANNEL,
-        headless = HEADLESS,
-    )
+    launch_options = {"headless": HEADLESS}
+    if BROWSER_CHANNEL:
+        launch_options["channel"] = BROWSER_CHANNEL
+    browser = p.chromium.launch(**launch_options)
     return browser
+
+#phiên làm việc
 def create_context(browser:Browser) ->BrowserContext:
     context=browser.new_context()
     context.set_default_timeout(PAGE_TIMEOUT_MS)
     return context
+
+#tương đương các tab
 def create_page(context:BrowserContext)-> Page:
     page=context.new_page()
     page.set_default_timeout(PAGE_TIMEOUT_MS)
     return page
 
 #DATA RECORD HELPS  
-# một dict lưu thông tin mỗi lần chạy bắt một response catalog(1 category)
+# thống nhất cấu trúc lưu dữ liệu mỗi response
 def build_catalog_record(
     run_id:str,
     category_name:str,
@@ -209,6 +368,44 @@ def click_subcategory(page:Page,name:str) ->bool:
     return False
 
 #RESPONSE COLLECTION
+
+#PAGINATION / LOAD MORE
+# Sau khi click vào subcategory, giả lập người dùng scroll và click phân trang để trang gọi thêm loadCatalog response.
+def load_more_catalog_pages(page: Page, max_pages: int = MAX_SCROLL_PAGES) -> None:
+    logger.info(f"Bắt đầu click phân trang Fahasa, max_pages={max_pages}")
+
+    for page_num in range(2, max_pages + 1):
+        try:
+            locator = page.locator("a", has_text=str(page_num))
+
+            if locator.count() == 0:
+                logger.info(f"Không tìm thấy nút trang {page_num}, dừng.")
+                break
+
+            clicked = False
+
+            for i in range(locator.count()):
+                item = locator.nth(i)
+                try:
+                    text = item.inner_text().strip()
+                    if text == str(page_num) and item.is_visible():
+                        item.scroll_into_view_if_needed()
+                        page.wait_for_timeout(500)
+                        item.click(force=True)
+                        page.wait_for_timeout(MEDIUM_WAIT_MS)
+                        logger.info(f"Đã click trang {page_num}")
+                        clicked = True
+                        break
+                except Exception as e:
+                    logger.warning(f"Lỗi khi thử click trang {page_num}: {e}")
+
+            if not clicked:
+                logger.info(f"Không click được trang {page_num}, dừng.")
+                break
+
+        except Exception as e:
+            logger.warning(f"Lỗi khi load trang {page_num}: {e}")
+            break
 # phần sẽ nghe tại trang đang trỏ và bắt response kiểm tra thỏa mãn điều kiện,nếu ok thì đưa về dạng dict để lưu 
 def attach_catalog_response_listener(
     page:Page,
@@ -219,7 +416,7 @@ def attach_catalog_response_listener(
 ) -> None:
     def handle_response(response):
         try:
-            if CATALOG_API_KEYWORD not in response.url:
+            if not any(keyword in response.url for keyword in CATALOG_API_KEYWORDS):
                 return
             if response.status !=200:
                 return 
@@ -266,7 +463,7 @@ def capture_catalog_response(
 )-> Optional[Dict[str,Any]]:
     try:
         with page.expect_response(
-            lambda r: CATALOG_API_KEYWORD in r.url and r.status == 200,
+            lambda r: any(keyword in r.url for keyword in CATALOG_API_KEYWORDS) and r.status == 200,
             timeout=10000,
         ) as resp_info:
             clicked=click_subcategory(page,category_name)
@@ -409,13 +606,16 @@ def build_summary(raw_data:List[Dict[str,Any]]) ->Dict[str,Any]:
     
 #STORAGE
 #Lưu thông tin thô về mặt toàn bộ dữ liệu ở local
-def save_raw_local(raw_data:List[Dict[str,Any]],run_id:str) -> str:
-    os.makedirs(DATA_DIR,exist_ok=True)
-    raw_file=os.path.join(DATA_DIR,f"fahasa_raw_{run_id}.json")
-    with open(raw_file,"w",encoding="utf-8") as f:
-        json.dump(raw_data,f,ensure_ascii=False,indent=2)
-        
-    logger.info(f"Đã lưu raw data local: {raw_file}")
+def save_raw_local(raw_data: List[Dict[str, Any]], run_id: str) -> str:
+    os.makedirs(DATA_DIR, exist_ok=True)
+  
+    raw_file = os.path.join(DATA_DIR, f"fahasa_raw_{run_id}.jsonl") 
+    
+    with open(raw_file, "w", encoding="utf-8") as f:
+        for record in raw_data:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+            
+    logger.info(f"Đã lưu raw data dạng JSONL tại: {raw_file}")
     return raw_file
 
 #lưu thông tin thô về mặt tóm tắt dữ liệu ở local
@@ -456,13 +656,13 @@ def crawl_categories(page:Page,run_id:str) -> List[Dict[str,Any]]:
     page.on(
             "request",
             lambda req: logger.info(f"REQUEST: {req.url}")
-            if CATALOG_API_KEYWORD in req.url else None
+            if any(keyword in req.url for keyword in CATALOG_API_KEYWORDS) else None
             )
     
     page.on(
         "requestfailed",
         lambda req: logger.warning(f"REQUEST FAILED: {req.url}")
-        if CATALOG_API_KEYWORD in req.url else None
+        if any(keyword in req.url for keyword in CATALOG_API_KEYWORDS) else None
     )
     
     
@@ -492,6 +692,7 @@ def crawl_categories(page:Page,run_id:str) -> List[Dict[str,Any]]:
                     continue
                 
                 page.wait_for_timeout(MEDIUM_WAIT_MS)
+                load_more_catalog_pages(page, MAX_SCROLL_PAGES)
             except Exception as e:
                 logger.warning(f"Lỗi khi crawl subcategory '{target_name}': {e}")
         
@@ -512,6 +713,7 @@ def crawl_categories(page:Page,run_id:str) -> List[Dict[str,Any]]:
 #hàm này gọi toàn bộ để phần crawl theo logic chính
 def crawl_raw_catalog_data() -> Dict[str,Any]:
     run_id=now_str()
+    client=None
     client=create_minio_client()
     ensure_bucket(client,MINIO_BUCKET)
     
@@ -537,16 +739,13 @@ def crawl_raw_catalog_data() -> Dict[str,Any]:
         
         try:
             raw_data=crawl_categories(page,run_id)
-            enrich_all_products(page,raw_data)
+            # enrich_all_products(page,raw_data)
             summary=build_summary(raw_data)
             raw_file=save_raw_local(raw_data,run_id)
             summary_file=save_summary_local(summary,run_id)
             
-            raw_object_name = f"raw/fahasa_raw_{run_id}.json"
-            summary_object_name = f"raw/fahasa_summary_{run_id}.json"
-
-            upload_file_to_minio(client, MINIO_BUCKET, raw_file, raw_object_name)
-            upload_file_to_minio(client, MINIO_BUCKET, summary_file, summary_object_name)
+            raw_object_name = f"raw/fahasa/fahasa_raw_{run_id}.jsonl"
+            summary_object_name = f"raw/fahasa/fahasa_summary_{run_id}.json"
             
             upsert_pipeline_run(
                 process_run_id=run_id,
@@ -570,6 +769,16 @@ def crawl_raw_catalog_data() -> Dict[str,Any]:
                 records_rejected=summary.get("detail_error",0)+summary.get("no_flashsale_response",0),
                 message=f"subcategories_collected={summary.get('total_subcategories_collected',0)}"
             )
+            
+            # Upload lên MinIO
+            try:
+                upload_to_lake(raw_file, raw_object_name)
+                upload_to_lake(summary_file, summary_object_name)
+                logger.info(f" Đã upload JSON: {raw_object_name}")
+                logger.info(f" Đã upload summary: {summary_object_name}")
+            except Exception as e:
+                logger.warning(f" Lỗi upload MinIO: {e}")
+            
             return {
                 "run_id": run_id,
                 "raw_file": raw_file,

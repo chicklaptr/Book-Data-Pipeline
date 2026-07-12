@@ -1,174 +1,226 @@
-version: "3.9"
+# cấu hình chung cho tất cả thành phần
+x-airflow-common: &airflow-common
+  build:
+    context: .
+    dockerfile: Dockerfile.airflow
+
+  environment: &airflow-common-env
+  # cách chạy task như thế nào
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+
+  # quản lý đăng nhập, phân quyền
+    AIRFLOW__CORE__AUTH_MANAGER: >-
+      airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
+
+  # kết nối postgres(lưu trạng thái hệ thống)
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: >-
+      postgresql+psycopg2://airflow:airflow@airflow-postgres:5432/airflow
+
+  # api cần gọi để phần trong hệ thống chạy các task được phân
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: >-
+      http://airflow-api-server:8080/execution/
+
+  # khóa xác thực để các thành phần airflow xác minh để giao tiếp
+    AIRFLOW__API_AUTH__JWT_SECRET: "${AIRFLOW_JWT_SECRET}"
+    AIRFLOW__API_AUTH__JWT_ISSUER: "book-data-airflow"
+
+  # mã hóa thông tin nhạy cảm lưu trong database
+    AIRFLOW__CORE__FERNET_KEY: "${FERNET_KEY}"
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
+
+  # hỗ trợ hiểu trino và minio đối với code crawl và process
+  # thông số của trino
+    TRINO_HOST: "trino"
+    TRINO_PORT: "8080"
+    TRINO_USER: "admin"
+
+  # thống số của minIO
+    MINIO_ENDPOINT: "minio:9000"
+    MINIO_ACCESS_KEY: "admin"
+    MINIO_SECRET_KEY: "password123"
+    MINIO_BUCKET: "data-lake"
+
+    PYTHONPATH: "/opt/airflow"
+    RAW_DIR: "/opt/airflow/data/raw"
+    PROCESSED_DIR: "/opt/airflow/data/processed"
+    HEADLESS: "true"
+
+  # lưu trữ dữ liệu của airflow cần được dùng
+  volumes:
+    - ./airflow/dags:/opt/airflow/dags
+    - ./airflow/logs:/opt/airflow/logs
+    - ./airflow/plugins:/opt/airflow/plugins
+    - ./airflow/config:/opt/airflow/config
+    - ./airflow/src:/opt/airflow/src
+    - ./airflow/data:/opt/airflow/data
+
+  # The Tiki crawler resolves public APIs from inside the Airflow containers.
+  # Explicit resolvers avoid intermittent Docker DNS lookup failures.
+  dns:
+    - 1.1.1.1
+    - 8.8.8.8
+
+  user: "${AIRFLOW_UID:-50000}:0"
+
+  networks:
+    - my_data_network
+
+  depends_on:
+    airflow-postgres:
+      condition: service_healthy
+
+
+networks:
+  my_data_network:
+    driver: bridge
+
+
+volumes:
+  airflow_postgres_data:
+
 
 services:
-  postgres:
-    image: postgres:16.13-alpine
-    container_name: postgres_dw
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: data_warehouse
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: 123456
-    ports:
-      - "5544:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - data_net
-
+  # 1. MinIO: Nơi lưu trữ file data (như S3)
   minio:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
-    container_name: minio_store
-    restart: unless-stopped
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    command: server /data --console-address ":9001"
+    image: minio/minio:latest
+    container_name: minio-local
     ports:
       - "9000:9000"
       - "9001:9001"
-    volumes:
-      - minio_data:/data
+    environment:
+      MINIO_ROOT_USER: "admin"
+      MINIO_ROOT_PASSWORD: "password123"
+    command: server /data --console-address ":9001"
     networks:
-      - data_net
+      - my_data_network
+    volumes:
+      - ./minio_data:/data
 
-  metabase:
-    image: metabase/metabase:v0.57.16
-    container_name: metabase_app
-    restart: unless-stopped
-    depends_on:
-      - postgres
-    ports:
-      - "3000:3000"
+  # 2. Trino: Công cụ truy vấn dữ liệu trên MinIO
+  trino:
+    image: trinodb/trino:380
+    container_name: trino
     volumes:
-      - metabase_data:/metabase-data
-    networks:
-      - data_net
-  airflow-init:
-    build:
-      context: .
-      dockerfile: Dockerfile.airflow
-    container_name: airflow_init
-    depends_on:
-      - postgres
-      - minio
-    environment:
-      AIRFLOW__WEBSERVER__SECRET_KEY: "fahasa_secret_key_123"
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://admin:123456@postgres:5432/data_warehouse
-      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-      AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.session,airflow.api.auth.backend.basic_auth
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-      MINIO_BUCKET: data-lake
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: 123456
-      POSTGRES_DB: data_warehouse
-      PYTHONPATH: /opt/airflow/project
-      MAX_FAILURE_RATE: 0.05
-      MIN_VALID_PRODUCTS: 10
-      MIN_TOTAL_PRODUCTS: 10
-    user: "50000:0"
-    volumes:
-      - ./dags:/opt/airflow/dags
-      - ./:/opt/airflow/project
-    working_dir: /opt/airflow/project
-    command: >
-      bash -c "
-      airflow db migrate &&
-      airflow users create
-      --username admin
-      --password admin
-      --firstname admin
-      --lastname admin
-      --role Admin
-      --email admin@example.com || true
-      "
-    networks:
-      - data_net
-  
-  airflow-webserver:
-    build:
-      context: .
-      dockerfile: Dockerfile.airflow
-    container_name: airflow_webserver
-    restart: unless-stopped
-    depends_on:
-      - airflow-init
-    environment:
-      AIRFLOW__WEBSERVER__SECRET_KEY: "fahasa_secret_key_123"
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://admin:123456@postgres:5432/data_warehouse
-      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-      AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.session,airflow.api.auth.backend.basic_auth
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-      MINIO_BUCKET: data-lake
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: 123456
-      POSTGRES_DB: data_warehouse
-      PYTHONPATH: /opt/airflow/project
-      MAX_FAILURE_RATE: 0.05
-      MIN_VALID_PRODUCTS: 10
-      MIN_TOTAL_PRODUCTS: 10
-    user: "50000:0"
-    volumes:
-      - ./dags:/opt/airflow/dags
-      - ./:/opt/airflow/project
-    working_dir: /opt/airflow/project
+      - ./trino-etc:/etc/trino
     ports:
       - "8080:8080"
-    command: airflow webserver
     networks:
-      - data_net
+      - my_data_network
+    healthcheck:
+      disable: true
+    # Trino cần config để trỏ vào MinIO, giữ nguyên setup cũ của bạn
 
-  airflow-scheduler:
-    build:
-      context: .
-      dockerfile: Dockerfile.airflow
-    container_name: airflow_scheduler
-    restart: unless-stopped
-    depends_on:
-      - airflow-init
+  # 3. Superset: Dashboard hiển thị
+  superset:
+    build: .
+    container_name: superset_app
+    restart: always
+    ports:
+      - "8088:8088"
     environment:
-      AIRFLOW__WEBSERVER__SECRET_KEY: "fahasa_secret_key_123"
-      AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.session,airflow.api.auth.backend.basic_auth
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://admin:123456@postgres:5432/data_warehouse
-      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-      MINIO_BUCKET: data-lake
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: 123456
-      POSTGRES_DB: data_warehouse
-      PYTHONPATH: /opt/airflow/project
-      MAX_FAILURE_RATE: 0.05
-      MIN_VALID_PRODUCTS: 10
-      MIN_TOTAL_PRODUCTS: 10
-    user: "50000:0"
+      SUPERSET_SECRET_KEY: "S3CUR3_K3Y_V3RY_L0NG_AND_C0MPL3X_RAND0M_STR1NG_1234567890_ABCD"
+      SUPERSET_LOAD_EXAMPLES: "no"
+      PYTHONPATH: "/app/pythonpath:/usr/local/lib/python3.10/site-packages"
     volumes:
-      - ./dags:/opt/airflow/dags
-      - ./:/opt/airflow/project
-    working_dir: /opt/airflow/project
-    command: airflow scheduler
+      - ./superset_data:/app/superset_home
     networks:
-      - data_net
+      - my_data_network
+  
+  # lưu dữ liệu cho airflow
+  airflow-postgres:
+    image: postgres:16
+    container_name: airflow-postgres
+    restart: always
 
-volumes:
-  postgres_data:
-  minio_data:
-  metabase_data:
+    environment:
+      POSTGRES_USER: "airflow"
+      POSTGRES_PASSWORD: "airflow"
+      POSTGRES_DB: "airflow"
 
-networks:
-  data_net:
-    driver: bridge
+    volumes:
+      - airflow_postgres_data:/var/lib/postgresql/data
+
+    networks:
+      - my_data_network
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U airflow -d airflow
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+  # khởi tạo airflow một lần khi chạy
+  airflow-init:
+    <<: *airflow-common
+
+    container_name: airflow-init
+
+    environment:
+      <<: *airflow-common-env
+
+      _AIRFLOW_DB_MIGRATE: "true"
+      _AIRFLOW_WWW_USER_CREATE: "true"
+      _AIRFLOW_WWW_USER_USERNAME: "airflow"
+      _AIRFLOW_WWW_USER_PASSWORD: "airflow"
+
+    command: version
+
+    restart: "no"
+
+
+  # giao diện của airflow
+  airflow-api-server:
+    <<: *airflow-common
+
+    container_name: airflow-api-server
+    command: api-server
+    restart: always
+
+    # Trino đã dùng 8080 ở máy host,
+    # nên Airflow dùng localhost:8081
+    ports:
+      - "8081:8080"
+
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+
+      airflow-init:
+        condition: service_completed_successfully
+
+
+  # airflow điều phối task thứ tự thế nào
+  airflow-scheduler:
+    <<: *airflow-common
+
+    container_name: airflow-scheduler
+    command: scheduler
+    restart: always
+
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+
+      airflow-init:
+        condition: service_completed_successfully
+
+
+  # airflow phần phân tích kĩ file dag(pipeline gồm các phần task)
+  airflow-dag-processor:
+    <<: *airflow-common
+
+    container_name: airflow-dag-processor
+    command: dag-processor
+    restart: always
+
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+
+      airflow-init:
+        condition: service_completed_successfully

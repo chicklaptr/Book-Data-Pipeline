@@ -1,76 +1,77 @@
-# Data Pipeline Fahasa
+# Book Data Pipeline
 
-This project implements an end-to-end data pipeline for e-commerce data:
+A local end-to-end data pipeline for collecting, processing, and querying book data from multiple Vietnamese e-commerce sources.
 
-crawl (local) → upload to MinIO → trigger Airflow → process → validate → load → audit
+## Overview
 
-The system includes data quality validation, pipeline monitoring, and incremental snapshot to avoid redundant data storage.
+This project ingests product data from Tiki, Phương Nam, Fahasa, Vinabook, and Bookbuy, stores raw data in MinIO, orchestrates processing with Airflow, normalizes and deduplicates records with Spark, and exposes the final dataset through Trino/Hive.
 
-## Pipeline Architecture
+## Architecture
 
-1. Crawl data locally from Fahasa API
-2. Upload raw data to MinIO
-3. Trigger Airflow DAG
-4. Process and validate data
-5. Apply quality gate
-6. Load into PostgreSQL
-7. Track pipeline execution (audit & status)
+![Architecture Diagram](docs/architecture.png)
 
-Each pipeline run is tracked using:
-- pipeline_runs
-- pipeline_task_audit
-- data_quality_reports
-- rejected_products
+1. Crawlers collect data from each source.
+2. Raw JSON/JSONL files are uploaded to MinIO.
+3. The Airflow DAG `book_data_pipeline` orchestrates the workflow:
+   - crawl tasks
+   - Spark processing and normalization
+   - Hive/Trino metadata update
+   - validation
+4. The final dataset is available for querying through Trino and can be visualized in Superset.
 
-## Features
+## Tech Stack
 
-- Data quality validation (field-level checks)
-- Quality gate to stop bad data
-- Pipeline audit tracking
-- Failure handling (fail fast)
-- Incremental snapshot (only store changed data)
-- Dockerized environment
-- Airflow orchestration
+- Python
+- Apache Airflow
+- Apache Spark
+- MinIO
+- Trino
+- Superset
+- Docker Compose
 
-## Run the project
+## Quick Start
 
-1. Start services:
-    ```bash
-   docker-compose up -d
-2. Initialize database:
-   ```bash
-   python init_schema.py
-4. Run pipeline:
-   ```bash
-   python start_pipeline.py
-   
-> Note: PostgreSQL runs inside Docker, so services must be started before initializing schema.
-   
+### Prerequisites
+
+- Docker Desktop
+- Docker Compose
+
+### 1. Start the services
+
+```bash
+docker compose up -d
+```
+
+### 2. Access the services
+
+- Airflow UI: http://localhost:8081
+- MinIO Console: http://localhost:9001
+- Superset: http://localhost:8088
+- Trino: http://localhost:8080
+
+Default Airflow credentials:
+- Username: `airflow`
+- Password: `airflow`
+
+### 3. Run the pipeline
+
+Open the Airflow UI, locate the DAG `book_data_pipeline`, and trigger it.
+
+### 4. Verify the output
+
+- Raw files are stored in the MinIO bucket `data-lake`
+- Processed outputs are written under `airflow/data/processed`
+- The final table is available as `hive.default.books_final`
+
 ## Project Structure
 
-- start_pipeline.py       # Entry point (crawl + trigger DAG)
-- call_trigger_dag.py     # Trigger Airflow DAG
-- crawl_data_toi_uu.py    # Data extraction
-- processed_data.py       # Data cleaning & validation
-- load_data.py            # Load to PostgreSQL
-- audit_utils.py          # Pipeline tracking
-- init_schema.py          # Database schema
-- dags/                   # Airflow DAGs
+- `airflow/dags/book_pipeline_dag.py` — main Airflow DAG
+- `airflow/src/` — crawlers, Spark processing, validation, and metadata update logic
+- `docker-compose.yml` — service orchestration
+- `requirements.txt` — Python dependencies
 
-     ![Pipeline](docs/pipeline.png)
+## Notes
 
-## Expected Result
+- Fahasa may be affected by Cloudflare challenges, so it is treated as an optional source during validation.
+- The validation step checks the final Trino/Hive table and expects the main sources to be present.
 
-- Raw data stored in MinIO
-- Clean data loaded into PostgreSQL
-- product_snapshot only updates when data changes
-- Pipeline execution tracked in audit tables
-
-## Future Improvements
-
-- Add automated testing -> prepare
-- Improve incremental logic with hashing -> prepare
-- Build dashboard (Metabase) -> doing
-- Add alerting (email/telegram) -> done
-
-   

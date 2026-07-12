@@ -1,0 +1,91 @@
+{
+  "writerVersion" : "380",
+  "owner" : "admin",
+  "tableType" : "EXTERNAL_TABLE",
+  "dataColumns" : [ {
+    "name" : "source_name",
+    "type" : "string"
+  }, {
+    "name" : "standard_category",
+    "type" : "string"
+  }, {
+    "name" : "source_category_id",
+    "type" : "string"
+  }, {
+    "name" : "source_category_name",
+    "type" : "string"
+  }, {
+    "name" : "source_parent_category_name",
+    "type" : "string"
+  }, {
+    "name" : "source_category_url",
+    "type" : "string"
+  }, {
+    "name" : "product_id",
+    "type" : "string"
+  }, {
+    "name" : "product_name",
+    "type" : "string"
+  }, {
+    "name" : "price",
+    "type" : "bigint"
+  }, {
+    "name" : "original_price",
+    "type" : "bigint"
+  }, {
+    "name" : "final_price",
+    "type" : "bigint"
+  }, {
+    "name" : "discount",
+    "type" : "int"
+  }, {
+    "name" : "rating_average",
+    "type" : "double"
+  }, {
+    "name" : "review_count",
+    "type" : "bigint"
+  }, {
+    "name" : "sold_qty",
+    "type" : "bigint"
+  }, {
+    "name" : "stock_available",
+    "type" : "int"
+  }, {
+    "name" : "product_url",
+    "type" : "string"
+  }, {
+    "name" : "image_url",
+    "type" : "string"
+  }, {
+    "name" : "crawl_page",
+    "type" : "int"
+  }, {
+    "name" : "crawl_time",
+    "type" : "string"
+  }, {
+    "name" : "product_key",
+    "type" : "string"
+  }, {
+    "name" : "name_key",
+    "type" : "string"
+  }, {
+    "name" : "processed_time",
+    "type" : "string"
+  }, {
+    "name" : "raw_file",
+    "type" : "string"
+  } ],
+  "partitionColumns" : [ ],
+  "parameters" : {
+    "presto_version" : "380",
+    "presto_query_id" : "20260712_112932_00001_6i9fw",
+    "transactional" : "false",
+    "auto.purge" : "false",
+    "EXTERNAL" : "TRUE",
+    "STATS_GENERATED_VIA_STATS_TASK" : "workaround for potential lack of HIVE-12730"
+  },
+  "storageFormat" : "PARQUET",
+  "serdeParameters" : { },
+  "externalLocation" : "s3://data-lake/processed/spark_run_20260712_111527/all_books_processed_single_parquet",
+  "columnStatistics" : { }
+}
