@@ -14,18 +14,18 @@ x-airflow-common: &airflow-common
 
   # kết nối postgres(lưu trạng thái hệ thống)
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: >-
-      postgresql+psycopg2://airflow:airflow@airflow-postgres:5432/airflow
+      postgresql+psycopg2://${AIRFLOW_POSTGRES_USER:-airflow}:${AIRFLOW_POSTGRES_PASSWORD:-airflow}@airflow-postgres:5432/${AIRFLOW_POSTGRES_DB:-airflow}
 
   # api cần gọi để phần trong hệ thống chạy các task được phân
     AIRFLOW__CORE__EXECUTION_API_SERVER_URL: >-
       http://airflow-api-server:8080/execution/
 
   # khóa xác thực để các thành phần airflow xác minh để giao tiếp
-    AIRFLOW__API_AUTH__JWT_SECRET: "${AIRFLOW_JWT_SECRET}"
+    AIRFLOW__API_AUTH__JWT_SECRET: "${AIRFLOW_JWT_SECRET:-replace-with-a-long-random-secret}"
     AIRFLOW__API_AUTH__JWT_ISSUER: "book-data-airflow"
 
   # mã hóa thông tin nhạy cảm lưu trong database
-    AIRFLOW__CORE__FERNET_KEY: "${FERNET_KEY}"
+    AIRFLOW__CORE__FERNET_KEY: "${FERNET_KEY:-replace-with-a-valid-fernet-key}"
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
@@ -38,9 +38,9 @@ x-airflow-common: &airflow-common
 
   # thống số của minIO
     MINIO_ENDPOINT: "minio:9000"
-    MINIO_ACCESS_KEY: "admin"
-    MINIO_SECRET_KEY: "password123"
-    MINIO_BUCKET: "data-lake"
+    MINIO_ACCESS_KEY: "${MINIO_ROOT_USER:-admin}"
+    MINIO_SECRET_KEY: "${MINIO_ROOT_PASSWORD:-password123}"
+    MINIO_BUCKET: "${MINIO_BUCKET:-data-lake}"
 
     PYTHONPATH: "/opt/airflow"
     RAW_DIR: "/opt/airflow/data/raw"
@@ -87,11 +87,11 @@ services:
     image: minio/minio:latest
     container_name: minio-local
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
     environment:
-      MINIO_ROOT_USER: "admin"
-      MINIO_ROOT_PASSWORD: "password123"
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER:-admin}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:-password123}"
     command: server /data --console-address ":9001"
     networks:
       - my_data_network
@@ -105,7 +105,7 @@ services:
     volumes:
       - ./trino-etc:/etc/trino
     ports:
-      - "8080:8080"
+      - "${TRINO_HOST_PORT:-8080}:8080"
     networks:
       - my_data_network
     healthcheck:
@@ -118,10 +118,10 @@ services:
     container_name: superset_app
     restart: always
     ports:
-      - "8088:8088"
+      - "${SUPERSET_PORT:-8088}:8088"
     environment:
-      SUPERSET_SECRET_KEY: "S3CUR3_K3Y_V3RY_L0NG_AND_C0MPL3X_RAND0M_STR1NG_1234567890_ABCD"
-      SUPERSET_LOAD_EXAMPLES: "no"
+      SUPERSET_SECRET_KEY: "${SUPERSET_SECRET_KEY:-replace-with-a-long-random-secret}"
+      SUPERSET_LOAD_EXAMPLES: "${SUPERSET_LOAD_EXAMPLES:-no}"
       PYTHONPATH: "/app/pythonpath:/usr/local/lib/python3.10/site-packages"
     volumes:
       - ./superset_data:/app/superset_home
@@ -135,9 +135,9 @@ services:
     restart: always
 
     environment:
-      POSTGRES_USER: "airflow"
-      POSTGRES_PASSWORD: "airflow"
-      POSTGRES_DB: "airflow"
+      POSTGRES_USER: "${AIRFLOW_POSTGRES_USER:-airflow}"
+      POSTGRES_PASSWORD: "${AIRFLOW_POSTGRES_PASSWORD:-airflow}"
+      POSTGRES_DB: "${AIRFLOW_POSTGRES_DB:-airflow}"
 
     volumes:
       - airflow_postgres_data:/var/lib/postgresql/data
@@ -165,8 +165,8 @@ services:
 
       _AIRFLOW_DB_MIGRATE: "true"
       _AIRFLOW_WWW_USER_CREATE: "true"
-      _AIRFLOW_WWW_USER_USERNAME: "airflow"
-      _AIRFLOW_WWW_USER_PASSWORD: "airflow"
+      _AIRFLOW_WWW_USER_USERNAME: "${AIRFLOW_USERNAME:-airflow}"
+      _AIRFLOW_WWW_USER_PASSWORD: "${AIRFLOW_PASSWORD:-airflow}"
 
     command: version
 
@@ -184,7 +184,7 @@ services:
     # Trino đã dùng 8080 ở máy host,
     # nên Airflow dùng localhost:8081
     ports:
-      - "8081:8080"
+      - "${AIRFLOW_UI_PORT:-8081}:8080"
 
     depends_on:
       airflow-postgres:

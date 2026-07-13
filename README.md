@@ -36,13 +36,19 @@ This project ingests product data from Tiki, Phương Nam, Fahasa, Vinabook, and
 - Docker Desktop
 - Docker Compose
 
-### 1. Start the services
+### 1. Copy the example environment file
 
 ```bash
-docker compose up -d
+copy .env.example .env
 ```
 
-### 2. Access the services
+### 2. Start the services
+
+```bash
+docker compose up -d --build
+```
+
+### 3. Access the services
 
 - Airflow UI: http://localhost:8081
 - MinIO Console: http://localhost:9001
@@ -52,6 +58,8 @@ docker compose up -d
 Default Airflow credentials:
 - Username: `airflow`
 - Password: `airflow`
+
+You can override ports and credentials through the `.env` file.
 
 ### 3. Run the pipeline
 
@@ -74,4 +82,5 @@ Open the Airflow UI, locate the DAG `book_data_pipeline`, and trigger it.
 
 - Fahasa may be affected by Cloudflare challenges, so it is treated as an optional source during validation.
 - The validation step checks the final Trino/Hive table and expects the main sources to be present.
+- For production deployments, replace placeholder secrets in `.env` with your own values before starting the stack.
 
