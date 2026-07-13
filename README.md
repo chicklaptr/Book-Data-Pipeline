@@ -1,4 +1,4 @@
-# Book Data Pipeline
+# Book-Data-Pipeline
 
 A local end-to-end data pipeline for collecting, processing, and querying book data from multiple Vietnamese e-commerce sources.
 
