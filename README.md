@@ -67,14 +67,14 @@ Open the Airflow UI, locate the DAG `book_data_pipeline`, and trigger it.
 
 ### 4. Verify the output
 
-- Raw files are stored in the MinIO bucket `data-lake`
-- Processed outputs are written under `airflow/data/processed`
-- The final table is available as `hive.default.books_final`
+- Raw files are stored in `airflow/data/raw`, push the MinIO `data-lake/raw`
+- Processed outputs are written under `airflow/data/processed`, push the MinIO bucket `data-lake/processed`
+- The final table is available as `hive.default.books_final`, link to file pacquet in `data-lake/processed/spark_run_%Y%m%d_%H%M%S/all_books_processed_single_parquet/` of MinIO
 
 ## Project Structure
 
 - `airflow/dags/book_pipeline_dag.py` — main Airflow DAG
-- `airflow/src/` — crawlers, Spark processing, validation, and metadata update logic
+- `airflow/src/` — crawlers, Spark processing, metadata update logic, and validation
 - `docker-compose.yml` — service orchestration
 - `requirements.txt` — Python dependencies
 
